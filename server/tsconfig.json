@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    /* ── Language & Environment ───────────────────────────────── */
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "CommonJS",
+    "moduleResolution": "node",
+
+    /* ── Paths ────────────────────────────────────────────────── */
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "baseUrl": "./src",
+
+    /* ── Strict Type Safety ───────────────────────────────────── */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+
+    /* ── Additional Checks ────────────────────────────────────── */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    /* ── Emit ─────────────────────────────────────────────────── */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "removeComments": false,
+
+    /* ── Interop ──────────────────────────────────────────────── */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    /* ── Decorators (reserved for future Mongoose plugins) ────── */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    /* ── Skip type-checking of node_modules ───────────────────── */
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
+}
