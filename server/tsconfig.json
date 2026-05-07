@@ -7,7 +7,7 @@
     "moduleResolution": "node",
 
     /* ── Paths ────────────────────────────────────────────────── */
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
     "baseUrl": "./src",
 
@@ -47,6 +47,6 @@
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "server.ts"],
   "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
 }

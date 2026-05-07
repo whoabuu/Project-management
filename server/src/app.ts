@@ -31,7 +31,7 @@ export const createApp = (): Application => {
 
   // ── CORS ───────────────────────────────────────────────────────────────────
   app.use(cors(corsOptions));
-  app.options('*', cors(corsOptions)); // Pre-flight for all routes
+  app.options(/(.*)/, cors(corsOptions)); // Pre-flight for all routes
 
   // ── Body Parsing ───────────────────────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }));          // Reject oversized payloads
