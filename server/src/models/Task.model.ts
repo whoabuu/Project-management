@@ -9,169 +9,95 @@ export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
 // ── Sub-document Interfaces ───────────────────────────────────────────────────
 
 /**
- * Immutable activity log entry. Every state-changing mutation on a Task
- * appends a record here. This is the PRIMARY data source for:
- *  - standup.agent (summarises "what changed yesterday")
- *  - Audit trail / compliance
+ * Immutable activity log entry.
+ * Primary data source for standup.agent and audit trail.
  */
 export interface IActivityLog {
-  _id: Types.ObjectId;
-  /** The user (or system/AI) who performed the action. */
-  actorId: Types.ObjectId;
-  actorName: string; // Denormalised to avoid populate() on every standup query
-  /** Human-readable action string (e.g. "moved to In Progress", "assigned to Alice"). */
-  action: string;
-  /** Which field was mutated. Undefined for creation events. */
-  field?: string;
+  _id:            Types.ObjectId;
+  actorId:        Types.ObjectId;
+  actorName:      string;
+  action:         string;
+  field?:         string;
   previousValue?: string;
-  nextValue?: string;
-  timestamp: Date;
-  /**
-   * TRUE when the action was performed by an AI agent.
-   * The standup.agent filters on this to distinguish human vs AI activity,
-   * preventing recursive summarisation loops.
-   */
-  isAIGenerated: boolean;
+  nextValue?:     string;
+  timestamp:      Date;
+  isAIGenerated:  boolean;
 }
 
 /**
- * A single comment on a task.
- * Embedded for MVP — can be extracted to its own collection if threads grow large.
+ * Embedded comment on a task.
  */
 export interface ITaskComment {
-  _id: Types.ObjectId;
-  authorId: Types.ObjectId;
-  authorName: string; // Denormalised
-  body: string;       // Markdown
+  _id:           Types.ObjectId;
+  authorId:      Types.ObjectId;
+  authorName:    string;
+  body:          string;
   isAIGenerated: boolean;
-  createdAt: Date;
-  editedAt?: Date;
+  createdAt:     Date;
+  editedAt?:     Date;
 }
 
 /**
- * AI Metadata sub-document.
+ * AI metadata sub-document.
  * Written exclusively by AI agents — never by direct user input.
- * This is the brain-state of the scrumMaster & capacity agents for this task.
+ * Powers the scrumMaster, capacity, and RAG agents.
  */
 export interface ITaskAIMeta {
-  /**
-   * Set TRUE when the scrumMaster.agent created this task via Epic decomposition.
-   * Allows filtering "AI-generated tasks" for review workflows.
-   */
-  aiGenerated: boolean;
-
-  /** The Epic task ID that spawned this task (if aiGenerated = true). */
+  aiGenerated:          boolean;
   generatedFromEpicId?: Types.ObjectId;
-
-  /**
-   * The exact LangChain prompt used to generate this task (stored for auditability).
-   * Allows replaying or debugging agent decomposition decisions.
-   */
   decompositionPrompt?: string;
-
-  /**
-   * Agent's confidence score for this decomposition (0.0 – 1.0).
-   * Tasks below a threshold (e.g. < 0.6) could be flagged for PM review.
-   */
-  confidenceScore?: number;
-
-  /**
-   * The user the capacity.agent recommended for assignment.
-   * Distinct from assigneeId — a PM may override this recommendation.
-   */
+  confidenceScore?:     number;       // 0.0 – 1.0
   suggestedAssigneeId?: Types.ObjectId;
-
-  /**
-   * Plain-English rationale from the capacity.agent explaining WHY it
-   * suggested this assignee (e.g. "Alice has React skills and 12h available").
-   */
   assignmentRationale?: string;
-
-  /**
-   * Pre-computed embedding vector for this task's title + description.
-   * Used by the RAG agent (rag.agent.ts) for semantic board search.
-   * Stored directly in MongoDB → Atlas Vector Search. No separate vector DB at MVP.
-   * Typical dimension: 1536 (text-embedding-3-small).
-   */
-  ragEmbedding?: number[];
-
-  /** Timestamp of last embedding computation — used to detect stale vectors. */
+  ragEmbedding?:        number[];     // 1536-dim vector for Atlas Vector Search
   embeddingGeneratedAt?: Date;
 }
 
 // ── Core Task Interface ───────────────────────────────────────────────────────
 
 export interface ITask extends Document {
-  _id: Types.ObjectId;
+  _id:       Types.ObjectId;
 
   // ── Project / Sprint Context ──────────────────────────────────────────────
   projectId: Types.ObjectId;
-  sprintId?: Types.ObjectId; // Null = backlog (not yet assigned to a sprint)
+  sprintId?: Types.ObjectId;
 
   // ── Hierarchy ─────────────────────────────────────────────────────────────
-  type: TaskType;
-  /**
-   * Reference to the parent task (Story under Epic, Subtask under Story).
-   * Null for top-level Epics and standalone Tasks.
-   */
-  parentId?: Types.ObjectId;
-  /**
-   * Denormalised children array for O(1) "give me all subtasks of this Epic"
-   * without a reverse lookup query.
-   */
-  childIds: Types.ObjectId[];
+  type:       TaskType;
+  parentId?:  Types.ObjectId;
+  childIds:   Types.ObjectId[];
 
   // ── Core Fields ───────────────────────────────────────────────────────────
-  title: string;
-  description?: string; // Markdown
-  status: TaskStatus;
-  /** Maps to IKanbanColumn.id on the parent Project. String FK — no join needed. */
-  columnId: string;
-  priority: TaskPriority;
-
-  /**
-   * Fibonacci story points: 0, 1, 2, 3, 5, 8, 13, 21.
-   * Used for sprint velocity calculation and capacity planning.
-   */
+  title:        string;
+  description?: string;
+  status:       TaskStatus;
+  columnId:     string;
+  priority:     TaskPriority;
   storyPoints?: number;
-
-  /**
-   * Estimated effort in hours — the capacity.agent uses this (not storyPoints)
-   * for precise load calculation against ICapacityProfile.weeklyHoursAvailable.
-   */
   estimatedHours?: number;
-
-  /**
-   * Actual hours logged by the developer post-completion.
-   * Delta between estimatedHours and actualHours feeds future estimation accuracy.
-   */
-  actualHours?: number;
+  actualHours?:    number;
 
   // ── People ────────────────────────────────────────────────────────────────
-  reporterId: Types.ObjectId;
+  reporterId:  Types.ObjectId;
   assigneeId?: Types.ObjectId;
-  watcherIds: Types.ObjectId[];
+  watcherIds:  Types.ObjectId[];
 
   // ── Dates ─────────────────────────────────────────────────────────────────
-  dueDate?: Date;
-  startedAt?: Date;   // Set when status → 'in_progress'
-  completedAt?: Date; // Set when status → 'done'
+  dueDate?:     Date;
+  startedAt?:   Date;
+  completedAt?: Date;
 
   // ── Metadata ──────────────────────────────────────────────────────────────
-  tags: string[];
+  tags:           string[];
   attachmentUrls: string[];
-  /**
-   * Positional order within the column for drag-and-drop re-ordering.
-   * Fractional indexing is recommended at the service layer to avoid bulk updates.
-   */
-  order: number;
+  order:          number;
 
   // ── AI Layer ──────────────────────────────────────────────────────────────
   aiMeta: ITaskAIMeta;
 
   // ── Audit Trail ───────────────────────────────────────────────────────────
   activityLog: Types.DocumentArray<IActivityLog & Document>;
-  comments: Types.DocumentArray<ITaskComment & Document>;
+  comments:    Types.DocumentArray<ITaskComment & Document>;
 
   createdAt: Date;
   updatedAt: Date;
@@ -190,7 +116,7 @@ const ActivityLogSchema = new Schema<IActivityLog>(
     timestamp:     { type: Date, required: true, default: () => new Date() },
     isAIGenerated: { type: Boolean, required: true, default: false },
   },
-  { _id: true } // Keep _id — useful for deduplication checks
+  { _id: true }
 );
 
 const TaskCommentSchema = new Schema<ITaskComment>(
@@ -208,35 +134,34 @@ const TaskCommentSchema = new Schema<ITaskComment>(
 const TaskAIMetaSchema = new Schema<ITaskAIMeta>(
   {
     aiGenerated: {
-      type: Boolean,
+      type:     Boolean,
       required: true,
-      default: false,
+      default:  false,
     },
     generatedFromEpicId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Task',
+      type:    Schema.Types.ObjectId,
+      ref:     'Task',
       default: null,
     },
-    decompositionPrompt: { type: String, default: null },
+    decompositionPrompt:  { type: String, default: null },
     confidenceScore: {
-      type: Number,
-      min: 0,
-      max: 1,
+      type:    Number,
+      min:     0,
+      max:     1,
       default: null,
     },
     suggestedAssigneeId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
+      type:    Schema.Types.ObjectId,
+      ref:     'User',
       default: null,
     },
-    assignmentRationale: { type: String, default: null },
+    assignmentRationale:  { type: String, default: null },
     ragEmbedding: {
-      type: [Number],
+      type:    [Number],
       default: undefined,
-      // Atlas Vector Search index will target this field.
-      // Index config (in Atlas UI or IaC):
-      //   { "fields": [{ "type": "vector", "path": "aiMeta.ragEmbedding",
-      //                  "numDimensions": 1536, "similarity": "cosine" }] }
+      // Atlas Vector Search index targets this field:
+      // { type: "vector", path: "aiMeta.ragEmbedding",
+      //   numDimensions: 1536, similarity: "cosine" }
     },
     embeddingGeneratedAt: { type: Date, default: null },
   },
@@ -248,112 +173,85 @@ const TaskAIMetaSchema = new Schema<ITaskAIMeta>(
 const TaskSchema = new Schema<ITask>(
   {
     projectId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Project',
+      type:     Schema.Types.ObjectId,
+      ref:      'Project',
       required: [true, 'projectId is required'],
     },
 
     sprintId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Project.sprints', // Logical ref — sprints are embedded on Project
+      type:    Schema.Types.ObjectId,
       default: null,
     },
 
     // ── Hierarchy ─────────────────────────────────────────────────────────
     type: {
-      type: String,
-      enum: ['epic', 'story', 'task', 'bug', 'subtask'] satisfies TaskType[],
+      type:     String,
+      enum:     ['epic', 'story', 'task', 'bug', 'subtask'] satisfies TaskType[],
       required: true,
-      default: 'task',
+      default:  'task',
     },
 
     parentId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Task',
+      type:    Schema.Types.ObjectId,
+      ref:     'Task',
       default: null,
     },
 
-    childIds: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: 'Task',
-      },
-    ],
+    childIds: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
 
     // ── Core ──────────────────────────────────────────────────────────────
     title: {
-      type: String,
-      required: [true, 'Task title is required'],
-      trim: true,
+      type:      String,
+      required:  [true, 'Task title is required'],
+      trim:      true,
       maxlength: [250, 'Title cannot exceed 250 characters'],
     },
 
     description: {
-      type: String,
-      trim: true,
+      type:      String,
+      trim:      true,
       maxlength: [20000, 'Description cannot exceed 20000 characters'],
-      default: null,
+      default:   null,
     },
 
     status: {
-      type: String,
-      enum: ['backlog', 'todo', 'in_progress', 'review', 'done'] satisfies TaskStatus[],
+      type:     String,
+      enum:     ['backlog', 'todo', 'in_progress', 'review', 'done'] satisfies TaskStatus[],
       required: true,
-      default: 'backlog',
+      default:  'backlog',
     },
 
     columnId: {
-      type: String,
+      type:     String,
       required: true,
-      default: 'backlog',
+      default:  'backlog',
     },
 
     priority: {
-      type: String,
-      enum: ['critical', 'high', 'medium', 'low'] satisfies TaskPriority[],
+      type:     String,
+      enum:     ['critical', 'high', 'medium', 'low'] satisfies TaskPriority[],
       required: true,
-      default: 'medium',
+      default:  'medium',
     },
 
     storyPoints: {
-      type: Number,
-      enum: [0, 1, 2, 3, 5, 8, 13, 21],
+      type:    Number,
+      enum:    [0, 1, 2, 3, 5, 8, 13, 21],
       default: null,
     },
 
-    estimatedHours: {
-      type: Number,
-      min: 0,
-      max: 999,
-      default: null,
-    },
-
-    actualHours: {
-      type: Number,
-      min: 0,
-      max: 999,
-      default: null,
-    },
+    estimatedHours: { type: Number, min: 0, max: 999, default: null },
+    actualHours:    { type: Number, min: 0, max: 999, default: null },
 
     // ── People ────────────────────────────────────────────────────────────
     reporterId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
+      type:     Schema.Types.ObjectId,
+      ref:      'User',
       required: true,
     },
 
-    assigneeId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-    },
-
-    watcherIds: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
+    assigneeId:  { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    watcherIds:  [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
     // ── Dates ─────────────────────────────────────────────────────────────
     dueDate:     { type: Date, default: null },
@@ -367,9 +265,9 @@ const TaskSchema = new Schema<ITask>(
 
     // ── AI Layer ──────────────────────────────────────────────────────────
     aiMeta: {
-      type: TaskAIMetaSchema,
+      type:     TaskAIMetaSchema,
       required: true,
-      default: () => ({ aiGenerated: false }),
+      default:  () => ({ aiGenerated: false }),
     },
 
     // ── Audit Trail ───────────────────────────────────────────────────────
@@ -380,11 +278,11 @@ const TaskSchema = new Schema<ITask>(
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: (_doc, ret: Record<string, any>) => {
-        // Strip the large embedding vector from API responses —
-        // it's only ever needed by the vectorstore service internally.
-        if (ret.aiMeta) delete ret.aiMeta.ragEmbedding;
-        delete ret.__v;
+      transform: (_doc, ret: Record<string, unknown>) => {
+        // Strip embedding vector — only used internally by vectorstore service
+        const aiMeta = ret['aiMeta'] as Record<string, unknown> | undefined;
+        if (aiMeta) delete aiMeta['ragEmbedding'];
+        delete ret['__v'];
         return ret;
       },
     },
@@ -393,23 +291,16 @@ const TaskSchema = new Schema<ITask>(
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
 
-// Core query patterns
-TaskSchema.index({ projectId: 1, status: 1 });             // Board view: all tasks for project by status
-TaskSchema.index({ projectId: 1, sprintId: 1 });           // Sprint board view
-TaskSchema.index({ assigneeId: 1, status: 1 });            // "My open tasks" view
-TaskSchema.index({ parentId: 1 });                         // Fetch all children of an Epic
-TaskSchema.index({ 'aiMeta.aiGenerated': 1, projectId: 1 }); // "Show AI-generated tasks for review"
-TaskSchema.index({ projectId: 1, order: 1 });              // Ordered board rendering
+TaskSchema.index({ projectId: 1, status: 1 });               // Board view
+TaskSchema.index({ projectId: 1, sprintId: 1 });             // Sprint board
+TaskSchema.index({ assigneeId: 1, status: 1 });              // "My open tasks"
+TaskSchema.index({ parentId: 1 });                           // Epic → children
+TaskSchema.index({ 'aiMeta.aiGenerated': 1, projectId: 1 }); // AI review queue
+TaskSchema.index({ projectId: 1, order: 1 });                // Ordered rendering
+TaskSchema.index({ projectId: 1, 'activityLog.timestamp': -1 }); // Standup agent
 
-// Compound index for standup agent: "what changed in project X since timestamp Y?"
-TaskSchema.index({ projectId: 1, 'activityLog.timestamp': -1 });
+// ── Pre-save Hook ─────────────────────────────────────────────────────────────
 
-// ── Middleware (Mongoose Hooks) ───────────────────────────────────────────────
-
-/**
- * Pre-save hook: auto-set startedAt and completedAt timestamps
- * based on status transitions. These power the burndown chart later.
- */
 TaskSchema.pre<HydratedDocument<ITask>>('save', async function () {
   if (this.isModified('status')) {
     if (this.status === 'in_progress' && !this.startedAt) {
@@ -421,12 +312,13 @@ TaskSchema.pre<HydratedDocument<ITask>>('save', async function () {
     if (this.status !== 'done') {
       this.completedAt = undefined;
     }
+    // Keep columnId in sync with status automatically
+    this.columnId = this.status;
   }
 });
 
 // ── Virtuals ──────────────────────────────────────────────────────────────────
 
-/** Cycle time in hours: how long from start to completion. */
 TaskSchema.virtual('cycleTimeHours').get(function (this: ITask) {
   if (!this.startedAt || !this.completedAt) return null;
   return (
@@ -434,7 +326,6 @@ TaskSchema.virtual('cycleTimeHours').get(function (this: ITask) {
   );
 });
 
-/** Estimation accuracy ratio (actual / estimated). 1.0 = perfect estimate. */
 TaskSchema.virtual('estimationAccuracy').get(function (this: ITask) {
   if (!this.estimatedHours || !this.actualHours) return null;
   return parseFloat((this.actualHours / this.estimatedHours).toFixed(2));

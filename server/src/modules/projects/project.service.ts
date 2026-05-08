@@ -15,24 +15,24 @@ import {
  * Throws 404 (not 403) deliberately — we don't confirm the project exists
  * to users who have no access to it, preventing enumeration.
  */
-const getAccessibleProject = async (
-  projectId: string,
-  userId: Types.ObjectId
-): Promise<IProject> => {
-  const project = await ProjectModel.findOne({
-    _id: new Types.ObjectId(projectId),
-    $or: [
-      { ownerId: userId },
-      { 'members.userId': userId },
-    ],
-  });
+// const getAccessibleProject = async (
+//   projectId: string,
+//   userId: Types.ObjectId
+// ): Promise<IProject> => {
+//   const project = await ProjectModel.findOne({
+//     _id: new Types.ObjectId(projectId),
+//     $or: [
+//       { ownerId: userId },
+//       { 'members.userId': userId },
+//     ],
+//   });
 
-  if (!project) {
-    throw new AppError('Project not found.', 404);
-  }
+//   if (!project) {
+//     throw new AppError('Project not found.', 404);
+//   }
 
-  return project;
-};
+//   return project;
+// };
 
 /**
  * Returns the project only if the requesting user is the owner.
