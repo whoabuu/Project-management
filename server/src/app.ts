@@ -9,10 +9,8 @@ import { globalErrorHandler } from './middleware/error.middleware';
 import { sendSuccess } from './shared/utils/apiResponse';
 import { env } from './config/env';
 import { authRouter } from './modules/auth/auth.routes';
-
-// ── Route Imports (modules registered as they are built) ─────────────────────
 // import { userRouter }    from './modules/users/user.routes';
-// import { projectRouter } from './modules/projects/project.routes';
+import { projectRouter } from './modules/projects/project.routes';
 // import { taskRouter }    from './modules/tasks/task.routes';
 // import { aiRouter }      from './modules/ai/ai.routes';
 
@@ -58,7 +56,7 @@ export const createApp = (): Application => {
   // Uncomment each line as the module is built in subsequent phases:
    app.use(`${API_PREFIX}/auth`, authRouter);
   // app.use(`${API_PREFIX}/users`, userRouter);
-  // app.use(`${API_PREFIX}/projects`, projectRouter);
+  app.use(`${API_PREFIX}/projects`, projectRouter);
   // app.use(`${API_PREFIX}/tasks`, taskRouter);
   // app.use(`${API_PREFIX}/ai`, aiRouter);
 
