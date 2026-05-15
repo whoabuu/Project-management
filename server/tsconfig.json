@@ -4,12 +4,12 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "CommonJS",
-    "moduleResolution": "node",
+    //"moduleResolution": "node",
 
     /* ── Paths ────────────────────────────────────────────────── */
     "rootDir": ".",
     "outDir": "./dist",
-    "baseUrl": "./src",
+    //"baseUrl": ".",
 
     /* ── Strict Type Safety ───────────────────────────────────── */
     "strict": true,
@@ -45,7 +45,7 @@
 
     /* ── Skip type-checking of node_modules ───────────────────── */
     "skipLibCheck": true,
-    "ignoreDeprecations": "6.0"
+    //"ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*", "server.ts"],
   "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]

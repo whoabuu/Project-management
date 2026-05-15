@@ -12,7 +12,7 @@ import { authRouter } from './modules/auth/auth.routes';
 // import { userRouter }    from './modules/users/user.routes';
 import { projectRouter } from './modules/projects/project.routes';
 import { taskRouter }    from './modules/tasks/task.routes';
-// import { aiRouter }      from './modules/ai/ai.routes';
+import { aiRouter }      from './modules/ai/ai.routes';
 
 /**
  * Express application factory.
@@ -58,7 +58,7 @@ export const createApp = (): Application => {
   // app.use(`${API_PREFIX}/users`, userRouter);
   app.use(`${API_PREFIX}/projects`, projectRouter);
   app.use(`${API_PREFIX}/tasks`, taskRouter);
-  // app.use(`${API_PREFIX}/ai`, aiRouter);
+  app.use(`${API_PREFIX}/ai`, aiRouter);
 
   // ── 404 Handler ────────────────────────────────────────────────────────────
   app.use((req: Request, res: Response) => {
