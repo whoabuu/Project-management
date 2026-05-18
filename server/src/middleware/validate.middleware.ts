@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodSchema, ZodError } from 'zod';
 import { sendError } from '../shared/utils/apiResponse';
 
-type RequestSection = 'body' | 'params' | 'query';
+type RequestSection = 'body' | 'params' | 'query' ;
 
 /**
  * Factory that returns an Express middleware validating a specific
