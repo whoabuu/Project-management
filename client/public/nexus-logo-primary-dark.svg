@@ -1,0 +1,10 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="160" height="160" rx="16" fill="#0f172a"/>
+  <rect x="44" y="14" width="72" height="72" rx="18" fill="#0ea5e9"/>
+  <rect x="36" y="44" width="88" height="22" rx="7" fill="#0f172a" transform="rotate(45 80 50)"/>
+  <rect x="36" y="44" width="88" height="22" rx="7" fill="#0f172a" transform="rotate(-45 80 50)"/>
+  <circle cx="80" cy="50" r="13" fill="#38bdf8"/>
+  <circle cx="80" cy="50" r="5" fill="#0f172a" opacity="0.5"/>
+  <text x="80" y="114" font-family="system-ui,-apple-system,sans-serif" font-size="26" font-weight="500" fill="#f8fafc" text-anchor="middle" letter-spacing="2">nexus</text>
+  <text x="80" y="134" font-family="system-ui,-apple-system,sans-serif" font-size="8" font-weight="400" fill="#475569" text-anchor="middle" letter-spacing="3">CONNECT · BUILD · SHIP</text>
+</svg>
