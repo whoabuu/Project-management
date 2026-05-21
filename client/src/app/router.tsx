@@ -4,6 +4,7 @@ import Dashboard from '../pages/Dashboard';
 import Projects from '../pages/Projects';
 import AiScrumMaster from '../pages/AiScrumMaster';
 import Tasks from '../pages/Tasks';
+import Team from '../pages/Team';
 
 export const router = createBrowserRouter([
   {
@@ -14,7 +15,7 @@ export const router = createBrowserRouter([
       { path: 'dashboard', element: <Dashboard /> },
       { path: 'projects', element: <Projects /> },
       { path: 'tasks', element: <Tasks /> },
-      { path: 'team',      element: <div className="text-slate-900 dark:text-white">Team</div>      },
+      { path: 'team', element: <Team /> },
       { path: 'ai', element: <AiScrumMaster /> },
     ],
   },
