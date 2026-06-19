@@ -317,21 +317,24 @@ const Login = () => {
 
               {/* Forgot password */}
               <div className="flex justify-end -mt-1">
-                <a>
+                <a
                   href="#"
                   className="
                     text-[12.5px] font-medium
                     text-sky-500 dark:text-sky-400
                     hover:text-sky-600 dark:hover:text-sky-300
                     transition-colors duration-150
-                  "
+                  ">
                 
                   Forgot password?
+                
                 </a>
               </div>
 
               {/* Demo credentials */}
-              <DemoBox onFill={(e, p) => { setEmail(e); setPassword(p); }} />
+              {import.meta.env.DEV && (
+                <DemoBox onFill={(e, p) => { setEmail(e); setPassword(p); }} />
+              )}
 
               {/* Submit */}
               <button
