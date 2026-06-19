@@ -5,8 +5,12 @@ import Projects from '../pages/Projects';
 import AiScrumMaster from '../pages/AiScrumMaster';
 import Tasks from '../pages/Tasks';
 import Team from '../pages/Team';
+import Login    from '../pages/Login';
+import Register from '../pages/Register';
 
 export const router = createBrowserRouter([
+  { path: '/login',    element: <Login />    },
+  { path: '/register', element: <Register /> },
   {
     path:    '/',
     element: <AppLayout />,
