@@ -6,6 +6,8 @@ import { sendSuccess } from '../../shared/utils/apiResponse';
 import { AppError } from '../../middleware/error.middleware';
 import { decomposeEpic } from './agents/scrumMaster.agent';
 import { generateStandup } from './agents/standup.agent';
+import { ChatGroq } from '@langchain/groq';
+import { env } from '../../config/env';
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -148,5 +150,36 @@ export const generateStandupHandler = asyncHandler<AuthenticatedRequest>(
     sendSuccess(res, result, {
       message: 'Daily standup generated successfully.',
     });
+  }
+);
+
+const chatLlm = new ChatGroq({
+  apiKey:      env.GROQ_API_KEY,
+  model:       env.GROQ_MODEL,
+  maxTokens:   env.GROQ_MAX_TOKENS,
+  temperature: 0.5,
+});
+
+export const ChatSchema = z.object({
+  message:   z.string().min(1).max(2000),
+  projectId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+});
+
+export type ChatInput = z.infer<typeof ChatSchema>;
+
+export const chatHandler = asyncHandler<AuthenticatedRequest>(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { message } = req.body as ChatInput;
+
+    const response = await chatLlm.invoke([
+      { role: 'system', content: 'You are the Nexus AI Scrum Master. Be concise, helpful, and practical.' },
+      { role: 'user',   content: message },
+    ]);
+
+    const reply = typeof response.content === 'string'
+      ? response.content
+      : response.content.map((b) => ('text' in b ? b.text : '')).join('');
+
+    sendSuccess(res, { reply });
   }
 );

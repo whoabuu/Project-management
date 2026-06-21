@@ -9,6 +9,7 @@ import {
   StandupParamSchema,
   ConfirmTasksSchema,
 } from './ai.controller';
+import { chatHandler, ChatSchema } from './ai.controller';
 
 const router = Router();
 
@@ -56,5 +57,8 @@ router.get(
   validate('params', StandupParamSchema),
   generateStandupHandler
 );
+
+router.post('/chat', validate('body', ChatSchema), chatHandler);
+
 
 export { router as aiRouter };
