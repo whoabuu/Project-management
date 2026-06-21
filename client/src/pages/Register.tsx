@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   Check,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import type { UserRole } from '../contexts/AuthContext';
 
 // ── Background (reused from Login) ───────────────────────────────────────────
 
@@ -276,6 +278,7 @@ const Register = () => {
   const [showConfirm, setShowConfirm]     = useState(false);
   const [errors, setErrors]              = useState<Record<string, string>>({});
   const [isLoading, setIsLoading]        = useState(false);
+  const { register } = useAuth();
 
   const validate = (): boolean => {
     const next: Record<string, string> = {};
@@ -291,12 +294,19 @@ const Register = () => {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+  
     setIsLoading(true);
-    // Axios submission logic will be wired here in Phase 3
-    setTimeout(() => setIsLoading(false), 1500);
+    try {
+      // Note: the role state needs to be cast to UserRole
+      await register(name, email, password, role as UserRole);
+  } catch (error: any) {
+    setErrors({ email: error.response?.data?.error || 'Registration failed' });
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   return (

@@ -11,6 +11,7 @@ import {
   ClipboardCopy,
   CheckCheck,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 // ── Demo credentials ──────────────────────────────────────────────────────────
 
@@ -190,6 +191,7 @@ const Login = () => {
   const [showPass, setShowPass] = useState(false);
   const [errors, setErrors]     = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
 
   const sessionExpired = searchParams.get('session') === 'expired';
 
@@ -202,12 +204,19 @@ const Login = () => {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
     setIsLoading(true);
-    // Axios submission logic will be wired here in Phase 3
-    setTimeout(() => setIsLoading(false), 1500);
+    try {
+    await login(email, password);
+    // If successful, AuthContext will automatically navigate to /dashboard!
+  } catch (error: any) {
+    // Show the error from the backend (e.g., "Invalid credentials")
+    setErrors({ email: error.response?.data?.error || 'Failed to login' });
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   return (
