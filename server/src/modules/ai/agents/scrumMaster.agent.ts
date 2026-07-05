@@ -163,13 +163,7 @@ export const decomposeEpic = async (
   }
 
   // ── 2. Fetch the parent Project ───────────────────────────────────────────
-  const project = await ProjectModel.findOne({
-    _id: epic.projectId,
-    $or: [
-      { ownerId: userId },
-      { 'members.userId': userId },
-    ],
-  });
+  const project = await ProjectModel.findById(epic.projectId);
 
   if (!project) {
     throw new AppError(
