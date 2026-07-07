@@ -1,4 +1,4 @@
-import { apiGet, apiPatch } from '../lib/api';
+import { apiGet, apiPatch, apiPost } from '../lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -6,7 +6,6 @@ export type ApiTaskType     = 'epic' | 'story' | 'task' | 'bug' | 'subtask';
 export type ApiTaskStatus   = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
 export type ApiTaskPriority = 'critical' | 'high' | 'medium' | 'low';
 
-/** Populated reference shape returned by Mongoose .populate() */
 export interface PopulatedUser {
   _id:       string;
   name:      string;
@@ -14,7 +13,6 @@ export interface PopulatedUser {
   avatarUrl?: string | null;
 }
 
-/** Mirrors the ITask shape returned by the backend (after toJSON transform). */
 export interface ApiTask {
   _id:             string;
   projectId:       string;
@@ -43,6 +41,17 @@ export interface ApiTask {
   updatedAt:       string;
 }
 
+export interface CreateTaskPayload {
+  projectId:      string;
+  title:          string;
+  description?:   string;
+  type:           ApiTaskType;
+  status:         ApiTaskStatus;
+  priority:       ApiTaskPriority;
+  storyPoints?:   number;
+  tags?:          string[];
+}
+
 interface GetTasksResponse {
   tasks: ApiTask[];
   count: number;
@@ -54,23 +63,11 @@ interface SingleTaskResponse {
 
 // ── Service Methods ───────────────────────────────────────────────────────────
 
-/**
- * Fetches all tasks belonging to a project.
- *
- * Note: the backend requires `projectId` as a query parameter (a user can
- * belong to many projects), so this isn't a true "all tasks ever" fetch —
- * it scopes to the currently active project's board.
- */
 export const getTasks = async (projectId: string): Promise<ApiTask[]> => {
   const result = await apiGet<GetTasksResponse>('/tasks', { projectId });
   return result.data.tasks;
 };
 
-/**
- * Updates a task's status (i.e. which Kanban column it lives in).
- * `columnId` is kept in sync with `status` automatically by the backend's
- * pre-save hook, so a single PATCH call is all that's needed.
- */
 export const updateTaskStatus = async (
   taskId:    string,
   newStatus: ApiTaskStatus
@@ -81,9 +78,21 @@ export const updateTaskStatus = async (
   return result.data.task;
 };
 
+/**
+ * Creates a new task on the backend.
+ * `columnId` is automatically derived from `status` by the backend pre-save hook.
+ */
+export const createTask = async (
+  payload: CreateTaskPayload
+): Promise<ApiTask> => {
+  const result = await apiPost<SingleTaskResponse>('/tasks', payload);
+  return result.data.task;
+};
+
 export const taskService = {
   getTasks,
   updateTaskStatus,
+  createTask,
 };
 
 export default taskService;

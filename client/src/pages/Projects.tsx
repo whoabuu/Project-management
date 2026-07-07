@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -9,7 +9,6 @@ import {
   useDroppable,
   type DragStartEvent,
   type DragEndEvent,
-  type DraggableAttributes,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -17,14 +16,14 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+//import type { SortableReturn } from '../types/dnd.types';
+import CreateTaskModal from '../components/board/NewTaskModal';
 import {
   Plus,
   Search,
-  Filter,
   MoreHorizontal,
   Calendar,
   AlertCircle,
-  ChevronDown,
   Circle,
   Zap,
   Bug,
@@ -32,20 +31,25 @@ import {
   Layers,
   Loader2,
   X,
+  ChevronDown,
 } from 'lucide-react';
-import { taskService, type ApiTask, type ApiTaskStatus } from '../services/taskService';
-import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
+import {
+  taskService,
+  type ApiTask,
+  type ApiTaskStatus,
+  type ApiTaskType,
+  type ApiTaskPriority,
+  type CreateTaskPayload,
+} from '../services/taskService';
 
+// ── Active project ────────────────────────────────────────────────────────────
 
-// ── Active project placeholder ────────────────────────────────────────────────
-// A real project switcher arrives in a later phase. For now the board is
-// scoped to a single hardcoded project so the wiring can be demonstrated.
-const ACTIVE_PROJECT_ID = import.meta.env.VITE_DEMO_PROJECT_ID || '';
+const ACTIVE_PROJECT_ID =
+  import.meta.env['VITE_DEMO_PROJECT_ID'] as string || '';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Priority = 'critical' | 'high' | 'medium' | 'low';
-type TaskType = 'epic' | 'story' | 'task' | 'bug' | 'subtask';
+type Priority = ApiTaskPriority;
 type ColumnId = 'todo' | 'in_progress' | 'review' | 'done';
 
 interface Assignee {
@@ -54,16 +58,17 @@ interface Assignee {
 }
 
 interface Task {
-  id:        string;
-  title:     string;
-  epic:      string;
-  epicColor: string;
-  priority:  Priority;
-  type:      TaskType;
-  assignee:  Assignee | null;
-  due:       string;
-  points:    number;
-  column:    ColumnId;
+  id:          string;
+  title:       string;
+  description: string;
+  epic:        string;
+  epicColor:   string;
+  priority:    Priority;
+  type:        ApiTaskType;
+  assignee:    Assignee | null;
+  due:         string;
+  points:      number;
+  column:      ColumnId;
 }
 
 interface Column {
@@ -74,13 +79,33 @@ interface Column {
   headerBg: string;
 }
 
+// ── Create task form state ────────────────────────────────────────────────────
+
+interface CreateForm {
+  title:       string;
+  description: string;
+  status:      ColumnId;
+  priority:    Priority;
+  type:        ApiTaskType;
+  storyPoints: string; // kept as string for controlled input, parsed on submit
+}
+
+const EMPTY_FORM: CreateForm = {
+  title:       '',
+  description: '',
+  status:      'todo',
+  priority:    'medium',
+  type:        'task',
+  storyPoints: '',
+};
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const COLUMNS: Column[] = [
-  { id: 'todo',        label: 'To Do',       accent: 'border-slate-300 dark:border-slate-600', dot: 'bg-slate-400',  headerBg: 'bg-slate-100 dark:bg-slate-800/60' },
-  { id: 'in_progress', label: 'In Progress', accent: 'border-sky-400 dark:border-sky-500',      dot: 'bg-sky-500',    headerBg: 'bg-sky-50 dark:bg-sky-500/10'       },
-  { id: 'review',      label: 'In Review',   accent: 'border-violet-400 dark:border-violet-500', dot: 'bg-violet-500', headerBg: 'bg-violet-50 dark:bg-violet-500/10' },
-  { id: 'done',        label: 'Done',        accent: 'border-emerald-400 dark:border-emerald-500', dot: 'bg-emerald-500', headerBg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+  { id: 'todo',        label: 'To Do',       accent: 'border-slate-300 dark:border-slate-600',       dot: 'bg-slate-400',   headerBg: 'bg-slate-100 dark:bg-slate-800/60'       },
+  { id: 'in_progress', label: 'In Progress', accent: 'border-sky-400 dark:border-sky-500',           dot: 'bg-sky-500',     headerBg: 'bg-sky-50 dark:bg-sky-500/10'            },
+  { id: 'review',      label: 'In Review',   accent: 'border-violet-400 dark:border-violet-500',     dot: 'bg-violet-500',  headerBg: 'bg-violet-50 dark:bg-violet-500/10'      },
+  { id: 'done',        label: 'Done',        accent: 'border-emerald-400 dark:border-emerald-500',   dot: 'bg-emerald-500', headerBg: 'bg-emerald-50 dark:bg-emerald-500/10'    },
 ];
 
 const PRIORITY_CONFIG: Record<Priority, { dot: string; label: string; text: string }> = {
@@ -90,15 +115,15 @@ const PRIORITY_CONFIG: Record<Priority, { dot: string; label: string; text: stri
   low:      { dot: 'bg-slate-400', label: 'Low',      text: 'text-slate-400' },
 };
 
-const TYPE_CONFIG: Record<TaskType, { icon: React.ReactNode; color: string }> = {
-  epic:    { icon: <Zap size={11} />,      color: 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'   },
-  story:   { icon: <BookOpen size={11} />, color: 'text-sky-500 bg-sky-50 dark:bg-sky-500/10'            },
-  task:    { icon: <Circle size={11} />,   color: 'text-slate-500 bg-slate-100 dark:bg-slate-700'        },
-  bug:     { icon: <Bug size={11} />,      color: 'text-red-500 bg-red-50 dark:bg-red-500/10'            },
-  subtask: { icon: <Layers size={11} />,   color: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'      },
+const TYPE_CONFIG: Record<ApiTaskType, { icon: React.ReactNode; color: string; label: string }> = {
+  epic:    { icon: <Zap size={11} />,      color: 'text-violet-500 bg-violet-50 dark:bg-violet-500/10', label: 'Epic'    },
+  story:   { icon: <BookOpen size={11} />, color: 'text-sky-500 bg-sky-50 dark:bg-sky-500/10',          label: 'Story'   },
+  task:    { icon: <Circle size={11} />,   color: 'text-slate-500 bg-slate-100 dark:bg-slate-700',      label: 'Task'    },
+  bug:     { icon: <Bug size={11} />,      color: 'text-red-500 bg-red-50 dark:bg-red-500/10',          label: 'Bug'     },
+  subtask: { icon: <Layers size={11} />,   color: 'text-amber-500 bg-amber-50 dark:bg-amber-500/10',   label: 'Subtask' },
 };
 
-const EPIC_COLOR_PALETTE = [
+const EPIC_COLORS = [
   'bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400',
   'bg-sky-100 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400',
   'bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400',
@@ -106,79 +131,79 @@ const EPIC_COLOR_PALETTE = [
   'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
 ];
 
-const AVATAR_COLOR_PALETTE = [
-  'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-indigo-500',
+const AVATAR_COLORS = [
+  'bg-sky-500', 'bg-emerald-500', 'bg-amber-500',
+  'bg-violet-500', 'bg-rose-500', 'bg-indigo-500',
 ];
 
-// ── Mappers ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Simple deterministic hash → palette index, so the same id/tag always gets the same colour. */
-const hashToIndex = (input: string, paletteLength: number): number => {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash << 5) - hash + input.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash) % paletteLength;
+const hashIndex = (str: string, len: number): number => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
+  return Math.abs(h) % len;
 };
 
-const getInitials = (name: string): string =>
-  name
-    .trim()
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+const getInitials = (name: string) =>
+  name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
-const formatDueDate = (iso: string | null | undefined): string => {
+const formatDue = (iso?: string | null): string => {
   if (!iso) return 'No due date';
-
-  const date  = new Date(iso);
-  const today = new Date();
-  const diffDays = Math.round(
-    (date.setHours(0, 0, 0, 0) - today.setHours(0, 0, 0, 0)) / 86_400_000
+  const d = new Date(iso);
+  const t = new Date();
+  const diff = Math.round(
+    (d.setHours(0,0,0,0) - t.setHours(0,0,0,0)) / 86_400_000
   );
-
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Tomorrow';
-  if (diffDays === -1) return 'Yesterday';
-
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff === -1) return 'Yesterday';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
 const VALID_COLUMNS: ColumnId[] = ['todo', 'in_progress', 'review', 'done'];
 
-/** Maps a raw backend ApiTask into the lean shape the board UI renders. */
-const mapApiTaskToTask = (apiTask: ApiTask): Task | null => {
-  // Tasks still in 'backlog' don't have a column on this 4-column board view.
-  if (!VALID_COLUMNS.includes(apiTask.status as ColumnId)) return null;
-
-  const epicLabel = apiTask.tags[0] ?? 'General';
-  const epicColor = EPIC_COLOR_PALETTE[hashToIndex(epicLabel, EPIC_COLOR_PALETTE.length)];
-
-  let assignee: Assignee | null = null;
-  if (apiTask.assigneeId && typeof apiTask.assigneeId === 'object') {
-    const a = apiTask.assigneeId;
-    assignee = {
-      initials: getInitials(a.name),
-      color:    AVATAR_COLOR_PALETTE[hashToIndex(a._id, AVATAR_COLOR_PALETTE.length)],
-    };
-  }
-
+const mapApi = (t: ApiTask): Task | null => {
+  if (!VALID_COLUMNS.includes(t.status as ColumnId)) return null;
+  const epicLabel = t.tags[0] ?? 'General';
   return {
-    id:        apiTask._id,
-    title:     apiTask.title,
-    epic:      epicLabel,
-    epicColor,
-    priority:  apiTask.priority,
-    type:      apiTask.type,
-    assignee,
-    due:       formatDueDate(apiTask.dueDate),
-    points:    apiTask.storyPoints ?? 0,
-    column:    apiTask.status as ColumnId,
+    id:          t._id,
+    title:       t.title,
+    description: t.description ?? '',
+    epic:        epicLabel,
+    epicColor:   EPIC_COLORS[hashIndex(epicLabel, EPIC_COLORS.length)]!,
+    priority:    t.priority,
+    type:        t.type,
+    assignee:    t.assigneeId && typeof t.assigneeId === 'object'
+      ? { initials: getInitials(t.assigneeId.name), color: AVATAR_COLORS[hashIndex(t.assigneeId._id, AVATAR_COLORS.length)]! }
+      : null,
+    due:    formatDue(t.dueDate),
+    points: t.storyPoints ?? 0,
+    column: t.status as ColumnId,
   };
 };
+
+// ── Shared input classes ──────────────────────────────────────────────────────
+
+const INPUT_BASE = `
+  w-full px-3 py-2.5 rounded-xl text-[13.5px]
+  bg-white dark:bg-slate-900
+  text-slate-800 dark:text-slate-200
+  border border-slate-200 dark:border-slate-700
+  placeholder:text-slate-400 dark:placeholder:text-slate-600
+  focus:outline-none focus:ring-2 focus:ring-sky-400/30
+  focus:border-sky-400 dark:focus:border-sky-500
+  transition-all duration-150
+`;
+
+// ── Create Task Modal ─────────────────────────────────────────────────────────
+
+interface CreateTaskModalProps {
+  projectId:  string;
+  onClose:    () => void;
+  onCreate:   (task: Task) => void;
+}
+
+
 
 // ── TaskCard ──────────────────────────────────────────────────────────────────
 
@@ -189,8 +214,8 @@ const TaskCard = ({
 }: {
   task:             Task;
   dragHandleProps?: {
-     attributes: DraggableAttributes;
-    listeners:  SyntheticListenerMap | undefined;
+    attributes: ReturnType<typeof useSortable>['attributes'];
+    listeners:  ReturnType<typeof useSortable>['listeners'];
   };
   isOverlay?: boolean;
 }) => {
@@ -201,10 +226,9 @@ const TaskCard = ({
   return (
     <div
       {...(dragHandleProps?.attributes ?? {})}
-      {...(dragHandleProps?.listeners ?? {})}
+      {...(dragHandleProps?.listeners  ?? {})}
       className={`
-        group relative flex flex-col gap-3
-        p-4 rounded-xl
+        group relative flex flex-col gap-3 p-4 rounded-xl
         bg-white dark:bg-slate-900
         border border-slate-200 dark:border-slate-700/80
         ${isOverlay
@@ -216,35 +240,29 @@ const TaskCard = ({
       `}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold ${type.color}`}>
-            {type.icon}
-            {task.type.charAt(0).toUpperCase() + task.type.slice(1)}
+            {type.icon}{type.label}
           </span>
           <span className={`flex items-center gap-1 text-[10.5px] font-medium ${priority.text}`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priority.dot}`} />
             {priority.label}
           </span>
         </div>
-
-        <button className="
-          opacity-0 group-hover:opacity-100
-          flex items-center justify-center w-6 h-6 rounded-lg
-          hover:bg-slate-100 dark:hover:bg-slate-800
-          text-slate-400 dark:text-slate-500
-          transition-all duration-150
-        ">
+        <button className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-6 h-6 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 transition-all duration-150">
           <MoreHorizontal size={14} />
         </button>
       </div>
 
-      <p className={`
-        text-[13.5px] font-medium leading-snug
-        text-slate-800 dark:text-slate-200
-        ${isDone ? 'line-through text-slate-400 dark:text-slate-600' : ''}
-      `}>
+      <p className={`text-[13.5px] font-medium leading-snug text-slate-800 dark:text-slate-200 ${isDone ? 'line-through text-slate-400 dark:text-slate-600' : ''}`}>
         {task.title}
       </p>
+
+      {task.description && (
+        <p className="text-[12px] text-slate-400 dark:text-slate-600 leading-snug line-clamp-2">
+          {task.description}
+        </p>
+      )}
 
       <span className={`self-start px-2 py-0.5 rounded-md text-[11px] font-medium ${task.epicColor}`}>
         {task.epic}
@@ -259,49 +277,32 @@ const TaskCard = ({
           ) : (
             <div className="flex items-center justify-center w-6 h-6 rounded-lg shrink-0 border border-dashed border-slate-300 dark:border-slate-700" />
           )}
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
-            <Layers size={9} />
-            {task.points}
-          </span>
+          {task.points > 0 && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
+              <Layers size={9} />{task.points}
+            </span>
+          )}
         </div>
-
-        <span className={`
-          flex items-center gap-1 text-[11px] font-medium
-          ${task.due === 'Today'
-            ? 'text-red-500 dark:text-red-400'
-            : task.due === 'Tomorrow'
-            ? 'text-amber-500 dark:text-amber-400'
-            : 'text-slate-400 dark:text-slate-500'
-          }
-        `}>
-          <Calendar size={10} />
-          {task.due}
+        <span className={`flex items-center gap-1 text-[11px] font-medium ${
+          task.due === 'Today'     ? 'text-red-500 dark:text-red-400'   :
+          task.due === 'Tomorrow'  ? 'text-amber-500 dark:text-amber-400' :
+          'text-slate-400 dark:text-slate-500'
+        }`}>
+          <Calendar size={10} />{task.due}
         </span>
       </div>
     </div>
   );
 };
 
-// ── Sortable wrapper for TaskCard ─────────────────────────────────────────────
+// ── SortableTaskCard ──────────────────────────────────────────────────────────
 
 const SortableTaskCard = ({ task }: { task: Task }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity:   isDragging ? 0.35 : 1,
-  };
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: task.id });
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }}>
       <TaskCard task={task} dragHandleProps={{ attributes, listeners }} />
     </div>
   );
@@ -312,33 +313,34 @@ const SortableTaskCard = ({ task }: { task: Task }) => {
 const KanbanColumn = ({
   column,
   tasks,
+  onAddTask,
 }: {
-  column: Column;
-  tasks:  Task[];
+  column:     Column;
+  tasks:      Task[];
+  onAddTask:  (colId: ColumnId) => void;
 }) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
-  const totalPoints = tasks.reduce((sum, t) => sum + t.points, 0);
+  const totalPoints = tasks.reduce((s, t) => s + t.points, 0);
 
   return (
     <div className="flex flex-col w-[300px] shrink-0">
-      <div className={`
-        flex items-center justify-between px-3 py-2.5 rounded-xl mb-3
-        ${column.headerBg} border-t-2 ${column.accent}
-      `}>
+      <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl mb-3 ${column.headerBg} border-t-2 ${column.accent}`}>
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${column.dot}`} />
-          <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
-            {column.label}
-          </span>
+          <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{column.label}</span>
           <span className="px-1.5 py-0.5 rounded-full bg-white dark:bg-slate-900 text-[11px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
             {tasks.length}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-600">
-            {totalPoints} pts
-          </span>
-          <button className="flex items-center justify-center w-6 h-6 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 transition-colors duration-150">
+          {totalPoints > 0 && (
+            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-600">{totalPoints} pts</span>
+          )}
+          <button
+            onClick={() => onAddTask(column.id)}
+            aria-label={`Add task to ${column.label}`}
+            className="flex items-center justify-center w-6 h-6 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 transition-colors duration-150"
+          >
             <Plus size={13} />
           </button>
         </div>
@@ -354,16 +356,15 @@ const KanbanColumn = ({
       >
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.length === 0 ? (
-            <div className="
-              flex flex-col items-center justify-center gap-2 h-24 rounded-xl
-              border-2 border-dashed border-slate-200 dark:border-slate-800
-              text-slate-300 dark:text-slate-700 text-[12px] font-medium
-            ">
-              <Circle size={20} />
-              <span>Drop here</span>
+            <div
+              onClick={() => onAddTask(column.id)}
+              className="flex flex-col items-center justify-center gap-2 h-24 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-700 text-[12px] font-medium cursor-pointer hover:border-sky-300 dark:hover:border-sky-700 hover:text-sky-400 transition-all duration-150"
+            >
+              <Plus size={18} />
+              <span>Add task</span>
             </div>
           ) : (
-            tasks.map((task) => <SortableTaskCard key={task.id} task={task} />)
+            tasks.map((t) => <SortableTaskCard key={t.id} task={t} />)
           )}
         </SortableContext>
       </div>
@@ -371,17 +372,13 @@ const KanbanColumn = ({
   );
 };
 
-// ── Skeleton Loader ───────────────────────────────────────────────────────────
+// ── Column Skeleton ───────────────────────────────────────────────────────────
 
 const ColumnSkeleton = () => (
   <div className="flex flex-col w-[300px] shrink-0 gap-3">
     <div className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
     {[1, 2, 3].map((i) => (
-      <div
-        key={i}
-        className="h-32 rounded-xl bg-slate-100 dark:bg-slate-800/60 animate-pulse"
-        style={{ animationDelay: `${i * 80}ms` }}
-      />
+      <div key={i} className="h-32 rounded-xl bg-slate-100 dark:bg-slate-800/60 animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
     ))}
   </div>
 );
@@ -389,301 +386,333 @@ const ColumnSkeleton = () => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const Projects = () => {
-  const [tasks, setTasks]             = useState<Task[]>([]);
-  const [isLoading, setIsLoading]     = useState(true);
-  const [loadError, setLoadError]     = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [search, setSearch]           = useState('');
-  const [activeFilter, setActiveFilter] = useState<Priority | 'all'>('all');
-  const [activeTask, setActiveTask]   = useState<Task | null>(null);
+  const [tasks,         setTasks]         = useState<Task[]>([]);
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [loadError,     setLoadError]     = useState<string | null>(null);
+  const [actionError,   setActionError]   = useState<string | null>(null);
+  const [activeTask,    setActiveTask]    = useState<Task | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
-  );
+  // Modal
+  const [isModalOpen,   setIsModalOpen]   = useState(false);
+  const [defaultColumn, setDefaultColumn] = useState<ColumnId>('todo');
 
-  // ── Fetch tasks on mount ────────────────────────────────────────────────────
+  // Filters
+  const [search,        setSearch]        = useState('');
+  const [activeFilter,  setActiveFilter]  = useState<Priority | 'all'>('all');
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  // ── Fetch ───────────────────────────────────────────────────────────────────
   const fetchTasks = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
-
     try {
-      const apiTasks = await taskService.getTasks(ACTIVE_PROJECT_ID);
-      const mapped = apiTasks
-        .map(mapApiTaskToTask)
-        .filter((t): t is Task => t !== null);
+      const api    = await taskService.getTasks(ACTIVE_PROJECT_ID);
+      const mapped = api.map(mapApi).filter((t): t is Task => t !== null);
       setTasks(mapped);
-    } catch (err) {
-      console.error('[Projects] Failed to fetch tasks:', err);
+    } catch {
       setLoadError('Could not load tasks. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void fetchTasks();
-  }, [fetchTasks]);
+  useEffect(() => { void fetchTasks(); }, [fetchTasks]);
 
-  // ── Drag handlers ────────────────────────────────────────────────────────────
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const task = tasks.find((t) => t.id === event.active.id);
-    setActiveTask(task ?? null);
+  // ── Open modal helpers ──────────────────────────────────────────────────────
+  const openModal = (colId: ColumnId = 'todo') => {
+    setDefaultColumn(colId);
+    setIsModalOpen(true);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveTask(null);
+  // ── Task created callback ───────────────────────────────────────────────────
+  const handleTaskCreated = useCallback((task?: any) => {
+    if (task) {
+      setTasks((prev) => [task, ...prev]);
+    }
+    setIsModalOpen(false); // Close the modal smoothly
+  }, []);
 
+  // ── Drag handlers ───────────────────────────────────────────────────────────
+  const handleDragStart = (e: DragStartEvent) => {
+    setActiveTask(tasks.find((t) => t.id === e.active.id) ?? null);
+  };
+
+  const handleDragEnd = async (e: DragEndEvent) => {
+    const { active, over } = e;
+    setActiveTask(null);
     if (!over) return;
 
-    const draggedTask = tasks.find((t) => t.id === active.id);
-    if (!draggedTask) return;
+    const dragged = tasks.find((t) => t.id === active.id);
+    if (!dragged) return;
 
-    // Determine the destination column: `over` is either a column container
-    // (dropped on an empty column) or another task (dropped near a card).
-    const overTask = tasks.find((t) => t.id === over.id);
-    const destColumnId = (overTask ? overTask.column : over.id) as ColumnId;
-    const sourceColumnId = draggedTask.column;
+    const overTask   = tasks.find((t) => t.id === over.id);
+    const destCol    = (overTask ? overTask.column : over.id) as ColumnId;
 
-    if (!VALID_COLUMNS.includes(destColumnId) || sourceColumnId === destColumnId) {
-      return; // No cross-column move — nothing to persist
-    }
+    if (!VALID_COLUMNS.includes(destCol) || dragged.column === destCol) return;
 
-    // ── Optimistic update ──────────────────────────────────────────────────
-    const previousTasks = tasks;
-    setTasks((prev) =>
-      prev.map((t) => (t.id === draggedTask.id ? { ...t, column: destColumnId } : t))
-    );
+    const snapshot = tasks;
+    setTasks((prev) => prev.map((t) => t.id === dragged.id ? { ...t, column: destCol } : t));
     setActionError(null);
 
     try {
-      await taskService.updateTaskStatus(draggedTask.id, destColumnId);
-    } catch (err) {
-      console.error('[Projects] Failed to update task status:', err);
-      // ── Revert on failure ────────────────────────────────────────────────
-      setTasks(previousTasks);
-      setActionError(`Couldn't move "${draggedTask.title}" — change reverted.`);
+      await taskService.updateTaskStatus(dragged.id, destCol);
+    } catch {
+      setTasks(snapshot);
+      setActionError(`Couldn't move "${dragged.title}" — change reverted.`);
     }
   };
 
-  // ── Filtering ─────────────────────────────────────────────────────────────
-
-  const filteredTasks = tasks.filter((task) => {
+  // ── Filtering ───────────────────────────────────────────────────────────────
+  const filteredTasks = tasks.filter((t) => {
+    const q = search.toLowerCase();
     const matchSearch =
-      task.title.toLowerCase().includes(search.toLowerCase()) ||
-      task.epic.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = activeFilter === 'all' || task.priority === activeFilter;
-    return matchSearch && matchFilter;
+      !q ||
+      t.title.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q) ||
+      t.epic.toLowerCase().includes(q);
+    const matchPriority = activeFilter === 'all' || t.priority === activeFilter;
+    return matchSearch && matchPriority;
   });
 
-  const getColumnTasks = (colId: ColumnId) =>
-    filteredTasks.filter((t) => t.column === colId);
+  const getColTasks = (id: ColumnId) => filteredTasks.filter((t) => t.column === id);
 
   const totalTasks = tasks.length;
   const doneTasks  = tasks.filter((t) => t.column === 'done').length;
-  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  const pct        = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   return (
-    <div className="flex flex-col h-full gap-5 min-h-0">
+    <>
+      <div className="flex flex-col h-full gap-5 min-h-0">
 
-      {/* ── Header ───────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-        <div>
-          <h2 className="text-[20px] font-semibold text-slate-900 dark:text-slate-50">
-            Sprint 4 Board
-          </h2>
-          <p className="text-[13px] text-slate-400 dark:text-slate-600 mt-0.5">
-            {isLoading ? 'Loading tasks…' : `${doneTasks} of ${totalTasks} tasks completed`}
-          </p>
-        </div>
+        {/* ── Header ───────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+          <div>
+            <h2 className="text-[20px] font-semibold text-slate-900 dark:text-slate-50">
+              Sprint 4 Board
+            </h2>
+            <p className="text-[13px] text-slate-400 dark:text-slate-600 mt-0.5">
+              {isLoading ? 'Loading tasks…' : `${doneTasks} of ${totalTasks} tasks completed`}
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-600" />
-            <input
-              type="text"
-              placeholder="Search tasks…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+          <div className="flex items-center gap-2 flex-wrap">
+
+            {/* Search */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-600 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search tasks…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="
+                  pl-9 pr-4 h-9 w-48 rounded-xl
+                  bg-white dark:bg-slate-900
+                  border border-slate-200 dark:border-slate-700
+                  text-[13px] text-slate-700 dark:text-slate-300
+                  placeholder:text-slate-400 dark:placeholder:text-slate-600
+                  focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent
+                  focus:w-56 transition-all duration-200
+                "
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Priority quick filters */}
+            <div className="hidden lg:flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+              {(['all', 'critical', 'high', 'medium', 'low'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setActiveFilter(f)}
+                  className={`
+                    h-7 px-2.5 rounded-lg text-[11.5px] font-medium
+                    transition-all duration-150 capitalize
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400
+                    ${activeFilter === f
+                      ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm border border-slate-200 dark:border-slate-700'
+                      : 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }
+                  `}
+                >
+                  {f === 'all' ? 'All' : (
+                    <span className="flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[f].dot}`} />
+                      {f}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* New Task */}
+            <button
+              onClick={() => openModal('todo')}
               className="
-                pl-9 pr-4 h-9 w-48 rounded-xl
-                bg-white dark:bg-slate-900
-                border border-slate-200 dark:border-slate-700
-                text-[13px] text-slate-700 dark:text-slate-300
-                placeholder:text-slate-400 dark:placeholder:text-slate-600
-                focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent
+                flex items-center gap-1.5 h-9 px-4 rounded-xl
+                bg-sky-500 hover:bg-sky-600 text-white text-[13px] font-medium
+                shadow-sm shadow-sky-500/30
+                hover:scale-[1.02] active:scale-[0.98]
                 transition-all duration-150
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400
               "
-            />
+            >
+              <Plus size={15} />
+              <span className="hidden sm:inline">New Task</span>
+            </button>
           </div>
-
-          <button className="
-            flex items-center gap-1.5 h-9 px-3 rounded-xl
-            bg-white dark:bg-slate-900
-            border border-slate-200 dark:border-slate-700
-            text-[13px] font-medium text-slate-600 dark:text-slate-400
-            hover:border-slate-300 dark:hover:border-slate-600
-            transition-colors duration-150
-          ">
-            <Filter size={13} />
-            {activeFilter === 'all' ? 'Filter' : activeFilter}
-            <ChevronDown size={12} />
-          </button>
-
-          <div className="hidden lg:flex items-center gap-1">
-            {(['all', 'critical', 'high', 'medium', 'low'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`
-                  h-7 px-2.5 rounded-lg text-[11.5px] font-medium
-                  transition-all duration-150 capitalize
-                  ${activeFilter === f
-                    ? 'bg-sky-500 text-white shadow-sm shadow-sky-500/30'
-                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-sky-300 dark:hover:border-sky-600 hover:text-sky-500 dark:hover:text-sky-400'
-                  }
-                `}
-              >
-                {f === 'all' ? 'All' : (
-                  <span className="flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[f].dot}`} />
-                    {f}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          <button className="
-            flex items-center gap-1.5 h-9 px-4 rounded-xl
-            bg-sky-500 hover:bg-sky-600 text-white text-[13px] font-medium
-            shadow-sm shadow-sky-500/30
-            hover:scale-[1.02] active:scale-[0.98]
-            transition-all duration-150
-          ">
-            <Plus size={15} />
-            <span className="hidden sm:inline">New Task</span>
-          </button>
         </div>
+
+        {/* ── Active filter chip ──────────────────────────────── */}
+        {(search || activeFilter !== 'all') && (
+          <div className="shrink-0 flex items-center gap-2 flex-wrap">
+            <span className="text-[12px] text-slate-400 dark:text-slate-600 font-medium">Filtering:</span>
+            {search && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[11.5px] font-medium border border-sky-200 dark:border-sky-500/30">
+                "{search}"
+                <button onClick={() => setSearch('')} aria-label="Remove search filter">
+                  <X size={11} />
+                </button>
+              </span>
+            )}
+            {activeFilter !== 'all' && (
+              <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium border ${PRIORITY_CONFIG[activeFilter].text} bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[activeFilter].dot}`} />
+                {PRIORITY_CONFIG[activeFilter].label}
+                <button onClick={() => setActiveFilter('all')} aria-label="Remove priority filter">
+                  <X size={11} />
+                </button>
+              </span>
+            )}
+            <span className="text-[11.5px] text-slate-400 dark:text-slate-600">
+              ({filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''})
+            </span>
+          </div>
+        )}
+
+        {/* ── Action error toast ──────────────────────────────── */}
+        {actionError && (
+          <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400">
+            <span className="flex items-center gap-2 text-[13px] font-medium">
+              <AlertCircle size={14} />{actionError}
+            </span>
+            <button onClick={() => setActionError(null)} aria-label="Dismiss"><X size={14} /></button>
+          </div>
+        )}
+
+        {/* ── Progress bar ──────────────────────────────────── */}
+        {!isLoading && totalTasks > 0 && (
+          <div className="shrink-0 flex items-center gap-3">
+            <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-700"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="text-[12px] font-semibold text-slate-500 dark:text-slate-500 shrink-0 tabular-nums">
+              {pct}% done
+            </span>
+          </div>
+        )}
+
+        {/* ── Load error ────────────────────────────────────── */}
+        {loadError && !isLoading && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <AlertCircle size={28} className="text-red-400" />
+            <p className="text-[14px] font-medium text-slate-500 dark:text-slate-400">{loadError}</p>
+            <button onClick={() => void fetchTasks()} className="text-[13px] font-medium text-sky-500 hover:text-sky-600 transition-colors">
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* ── Board ─────────────────────────────────────────── */}
+        {!loadError && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={(e) => void handleDragEnd(e)}
+          >
+            <div className="flex gap-4 overflow-x-auto pb-4 min-h-0 flex-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+              {isLoading
+                ? COLUMNS.map((c) => <ColumnSkeleton key={c.id} />)
+                : COLUMNS.map((c) => (
+                    <KanbanColumn
+                      key={c.id}
+                      column={c}
+                      tasks={getColTasks(c.id)}
+                      onAddTask={openModal}
+                    />
+                  ))
+              }
+
+              {!isLoading && (
+                <div className="flex items-start pt-1 shrink-0">
+                  <button className="flex items-center gap-2 w-[200px] px-4 py-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-[13px] font-medium text-slate-400 dark:text-slate-600 hover:border-sky-300 dark:hover:border-sky-700 hover:text-sky-500 transition-all duration-150">
+                    <Plus size={15} />Add column
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <DragOverlay>
+              {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+            </DragOverlay>
+          </DndContext>
+        )}
+
+        {/* ── Empty states ──────────────────────────────────── */}
+        {!isLoading && !loadError && totalTasks === 0 && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800">
+              <Layers size={24} className="text-slate-400 dark:text-slate-600" />
+            </div>
+            <p className="text-[14px] font-medium text-slate-500 dark:text-slate-500">
+              No tasks yet — create your first task to get started.
+            </p>
+            <button
+              onClick={() => openModal('todo')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-[13px] font-medium transition-colors"
+            >
+              <Plus size={14} />New Task
+            </button>
+          </div>
+        )}
+
+        {!isLoading && totalTasks > 0 && filteredTasks.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <Search size={28} className="text-slate-300 dark:text-slate-700" />
+            <p className="text-[14px] font-medium text-slate-400 dark:text-slate-600">
+              No tasks match your filters
+            </p>
+            <button
+              onClick={() => { setSearch(''); setActiveFilter('all'); }}
+              className="text-[13px] font-medium text-sky-500 hover:text-sky-600 transition-colors"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Action error toast ─────────────────────────────── */}
-      {actionError && (
-        <div className="
-          shrink-0 flex items-center justify-between gap-3
-          px-4 py-2.5 rounded-xl
-          bg-red-50 dark:bg-red-500/10
-          border border-red-200 dark:border-red-500/30
-          text-red-600 dark:text-red-400
-        ">
-          <span className="flex items-center gap-2 text-[13px] font-medium">
-            <AlertCircle size={14} />
-            {actionError}
-          </span>
-          <button onClick={() => setActionError(null)} aria-label="Dismiss">
-            <X size={14} />
-          </button>
-        </div>
+      {/* ── Create Task Modal ──────────────────────────────── */}
+      {isModalOpen && (
+        <CreateTaskModal
+          projectId={ACTIVE_PROJECT_ID}
+          onClose={() => setIsModalOpen(false)}
+          onCreate={handleTaskCreated}
+        />
       )}
-
-      {/* ── Progress bar ─────────────────────────────────── */}
-      {!isLoading && totalTasks > 0 && (
-        <div className="shrink-0 flex items-center gap-3">
-          <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-700"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <span className="text-[12px] font-semibold text-slate-500 dark:text-slate-500 shrink-0">
-            {progressPct}% done
-          </span>
-        </div>
-      )}
-
-      {/* ── Load error state ──────────────────────────────── */}
-      {loadError && !isLoading && (
-        <div className="
-          flex flex-col items-center justify-center gap-3 py-16
-          text-slate-400 dark:text-slate-600
-        ">
-          <AlertCircle size={28} className="text-red-400" />
-          <p className="text-[14px] font-medium text-slate-500 dark:text-slate-400">
-            {loadError}
-          </p>
-          <button
-            onClick={() => void fetchTasks()}
-            className="text-[13px] font-medium text-sky-500 hover:text-sky-600 transition-colors"
-          >
-            Try again
-          </button>
-        </div>
-      )}
-
-      {/* ── Board ────────────────────────────────────────── */}
-      {!loadError && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={(e) => void handleDragEnd(e)}
-        >
-          <div className="
-            flex gap-4 overflow-x-auto pb-4 min-h-0 flex-1
-            scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700
-          ">
-            {isLoading
-              ? COLUMNS.map((col) => <ColumnSkeleton key={col.id} />)
-              : COLUMNS.map((col) => (
-                  <KanbanColumn key={col.id} column={col} tasks={getColumnTasks(col.id)} />
-                ))
-            }
-
-            {!isLoading && (
-              <div className="flex items-start pt-1 shrink-0">
-                <button className="
-                  flex items-center gap-2 w-[200px] px-4 py-3 rounded-xl
-                  border-2 border-dashed border-slate-200 dark:border-slate-800
-                  text-[13px] font-medium text-slate-400 dark:text-slate-600
-                  hover:border-sky-300 dark:hover:border-sky-700
-                  hover:text-sky-500 dark:hover:text-sky-500
-                  transition-all duration-150
-                ">
-                  <Plus size={15} />
-                  Add column
-                </button>
-              </div>
-            )}
-          </div>
-
-          <DragOverlay>
-            {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
-          </DragOverlay>
-        </DndContext>
-      )}
-
-      {/* ── Empty states ──────────────────────────────────── */}
-      {!isLoading && !loadError && totalTasks === 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 py-16">
-          <Loader2 size={28} className="text-slate-300 dark:text-slate-700" />
-          <p className="text-[14px] font-medium text-slate-400 dark:text-slate-600">
-            No tasks yet — create your first task to get started.
-          </p>
-        </div>
-      )}
-
-      {!isLoading && totalTasks > 0 && filteredTasks.length === 0 && (
-        <div className="
-          flex flex-col items-center justify-center gap-3 py-16
-        ">
-          <AlertCircle size={28} className="text-slate-300 dark:text-slate-700" />
-          <p className="text-[14px] font-medium text-slate-400 dark:text-slate-600">
-            No tasks match your search
-          </p>
-        </div>
-      )}
-    </div>
+    </>
   );
 };
 
