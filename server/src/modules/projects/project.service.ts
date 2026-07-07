@@ -135,7 +135,7 @@ export const getProjectsForUser = async (
     .sort({ updatedAt: -1 })
     .populate('ownerId', 'name email avatarUrl')
     .populate('members.userId', 'name email avatarUrl')
-    .lean();
+    .lean() as any;
 };
 
 /**
@@ -153,9 +153,8 @@ export const getProjectById = async (
       { 'members.userId': userId },
     ],
   })
-    .populate('ownerId', 'name email avatarUrl')
-    .populate('members.userId', 'name email avatarUrl');
-
+    .populate('ownerId', 'name email avatarUrl role capacity')
+    .populate('members.userId', 'name email avatarUrl role capacity');
   if (!project) {
     throw new AppError('Project not found.', 404);
   }
