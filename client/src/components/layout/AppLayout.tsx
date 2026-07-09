@@ -12,7 +12,7 @@ import {
   Users,
   Bot,
   Zap,
-  Settings,
+  //Settings,
   SlidersHorizontal,
   LogOut,
   X,
@@ -126,7 +126,7 @@ const getRouteMeta = (pathname: string) => {
 
 const Sidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) => {
   const location = useLocation();
-  const { isDark } = useTheme();
+  useTheme();
 
   return (
     <aside className={`
