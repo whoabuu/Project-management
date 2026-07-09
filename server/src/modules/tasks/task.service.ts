@@ -17,7 +17,7 @@ import {
  * Called at the top of every service method before any DB mutation.
  * Throws 404 (not 403) to prevent project existence enumeration.
  */
-const assertProjectAccess = async (projectId: string, userId: string | Types.ObjectId) => {
+const assertProjectAccess = async (projectId: string, _userId: string | Types.ObjectId) => {
   // Bypass the strict membership check for local testing
   const project = await ProjectModel.findById(projectId);
   

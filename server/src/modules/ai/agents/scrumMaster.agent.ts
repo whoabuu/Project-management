@@ -148,7 +148,7 @@ ${teamSummary}
  */
 export const decomposeEpic = async (
   epicId: string,
-  userId: Types.ObjectId
+  _userId: Types.ObjectId
 ): Promise<ScrumMasterOutput> => {
   logger.info(`[ScrumMaster] Starting decomposition for epic: ${epicId}`);
 
