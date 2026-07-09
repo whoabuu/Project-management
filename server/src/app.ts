@@ -30,9 +30,7 @@ export const createApp = (): Application => {
   // Helmet sets sensible defaults: X-Frame-Options, X-XSS-Protection, etc.
   app.use(helmet());
 
-  // ── CORS ───────────────────────────────────────────────────────────────────
-  app.use(cors(corsOptions));
-  app.options(/(.*)/, cors(corsOptions)); // Pre-flight for all routes
+  
 
   // ── Body Parsing ───────────────────────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }));          // Reject oversized payloads
@@ -52,6 +50,10 @@ export const createApp = (): Application => {
       timestamp: new Date().toISOString(),
     });
   });
+
+  // ── CORS ───────────────────────────────────────────────────────────────────
+  app.use(cors(corsOptions));
+  app.options(/(.*)/, cors(corsOptions)); // Pre-flight for all routes
 
   // ── API Routes ─────────────────────────────────────────────────────────────
   const API_PREFIX = '/api/v1';
