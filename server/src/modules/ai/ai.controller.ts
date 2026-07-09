@@ -8,6 +8,7 @@ import { decomposeEpic } from './agents/scrumMaster.agent';
 import { generateStandup } from './agents/standup.agent';
 import { ChatGroq } from '@langchain/groq';
 import { env } from '../../config/env';
+import { generateStandupReport } from './standup.service';
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -44,6 +45,8 @@ export const ConfirmTasksSchema = z.object({
     )
     .min(1, 'Must confirm at least one task'),
 });
+
+
 
 export type DecomposeEpicInput  = z.infer<typeof DecomposeEpicSchema>;
 export type ConfirmTasksInput   = z.infer<typeof ConfirmTasksSchema>;
@@ -181,5 +184,20 @@ export const chatHandler = asyncHandler<AuthenticatedRequest>(
       : response.content.map((b) => ('text' in b ? b.text : '')).join('');
 
     sendSuccess(res, { reply });
+  }
+);
+
+export const getStandupHandler = asyncHandler<AuthenticatedRequest>(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { projectId } = req.params as { projectId: string };
+
+    const { markdown, generatedAt } = await generateStandupReport(
+      projectId,
+      req.user._id
+    );
+
+    sendSuccess(res, { markdown, generatedAt }, {
+      message: 'Standup report generated successfully.',
+    });
   }
 );

@@ -13,6 +13,9 @@ import { userRouter }    from './modules/users/user.routes';
 import { projectRouter } from './modules/projects/project.routes';
 import { taskRouter }    from './modules/tasks/task.routes';
 import { aiRouter }      from './modules/ai/ai.routes';
+import { requireAuth } from './middleware/auth.middleware';
+import { validate } from './middleware/validate.middleware';
+import { getStandupHandler, StandupParamSchema } from './modules/ai/ai.controller';
 
 /**
  * Express application factory.
@@ -52,6 +55,13 @@ export const createApp = (): Application => {
 
   // ── API Routes ─────────────────────────────────────────────────────────────
   const API_PREFIX = '/api/v1';
+
+  app.get(
+  `${API_PREFIX}/projects/:projectId/standup`,
+  requireAuth,
+  validate('params', StandupParamSchema),
+  getStandupHandler
+  );
 
   // Uncomment each line as the module is built in subsequent phases:
   app.use(`${API_PREFIX}/auth`, authRouter);

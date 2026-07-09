@@ -244,10 +244,10 @@ const CreateTaskModal = ({
                 <label className="text-[13px] font-medium text-slate-700 dark:text-slate-300">Priority</label>
                 <div className="relative">
                   <select value={form.priority} onChange={(e) => set('priority', e.target.value as Priority)} className={`${INPUT_BASE} appearance-none pr-8 cursor-pointer`}>
-                    <option value="critical">🔴 Critical</option>
-                    <option value="high">🟠 High</option>
-                    <option value="medium">🔵 Medium</option>
-                    <option value="low">⚪ Low</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
                   </select>
                   <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>

@@ -8,8 +8,10 @@ import {
   DecomposeEpicSchema,
   StandupParamSchema,
   ConfirmTasksSchema,
+  getStandupHandler,
 } from './ai.controller';
 import { chatHandler, ChatSchema } from './ai.controller';
+
 
 const router = Router();
 
@@ -59,6 +61,12 @@ router.get(
 );
 
 router.post('/chat', validate('body', ChatSchema), chatHandler);
+
+router.get(
+  '/projects/:projectId/standup',
+  validate('params', StandupParamSchema),
+  getStandupHandler
+);
 
 
 export { router as aiRouter };
