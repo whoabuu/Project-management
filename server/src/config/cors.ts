@@ -1,5 +1,5 @@
 import { CorsOptions } from 'cors';
-import { env, isProd } from './env';
+import {isProd } from './env';
 import { logger } from '../shared/utils/logger';
 
 
@@ -12,7 +12,10 @@ import { logger } from '../shared/utils/logger';
  * The allowedOrigins list can be extended for multi-tenant deployments
  * by moving it to an environment variable that accepts a comma-separated list.
  */
-const allowedOrigins = env.CORS_ORIGIN;
+const allowedOrigins = [
+  'http://localhost:5173', // Keep this so you can still develop locally
+  'https://nexus-agile-workspace.vercel.app' // Your new production frontend
+];
 
 export const corsOptions: CorsOptions = {
   origin: (
