@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -29,17 +29,13 @@ import {
   Bug,
   BookOpen,
   Layers,
-  Loader2,
   X,
-  ChevronDown,
 } from 'lucide-react';
 import {
   taskService,
   type ApiTask,
-  type ApiTaskStatus,
   type ApiTaskType,
   type ApiTaskPriority,
-  type CreateTaskPayload,
 } from '../services/taskService';
 
 // ── Active project ────────────────────────────────────────────────────────────
@@ -81,23 +77,23 @@ interface Column {
 
 // ── Create task form state ────────────────────────────────────────────────────
 
-interface CreateForm {
-  title:       string;
-  description: string;
-  status:      ColumnId;
-  priority:    Priority;
-  type:        ApiTaskType;
-  storyPoints: string; // kept as string for controlled input, parsed on submit
-}
+// interface CreateForm {
+//   title:       string;
+//   description: string;
+//   status:      ColumnId;
+//   priority:    Priority;
+//   type:        ApiTaskType;
+//   storyPoints: string; // kept as string for controlled input, parsed on submit
+// }
 
-const EMPTY_FORM: CreateForm = {
-  title:       '',
-  description: '',
-  status:      'todo',
-  priority:    'medium',
-  type:        'task',
-  storyPoints: '',
-};
+// const EMPTY_FORM: CreateForm = {
+//   title:       '',
+//   description: '',
+//   status:      'todo',
+//   priority:    'medium',
+//   type:        'task',
+//   storyPoints: '',
+// };
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -184,24 +180,24 @@ const mapApi = (t: ApiTask): Task | null => {
 
 // ── Shared input classes ──────────────────────────────────────────────────────
 
-const INPUT_BASE = `
-  w-full px-3 py-2.5 rounded-xl text-[13.5px]
-  bg-white dark:bg-slate-900
-  text-slate-800 dark:text-slate-200
-  border border-slate-200 dark:border-slate-700
-  placeholder:text-slate-400 dark:placeholder:text-slate-600
-  focus:outline-none focus:ring-2 focus:ring-sky-400/30
-  focus:border-sky-400 dark:focus:border-sky-500
-  transition-all duration-150
-`;
+// const INPUT_BASE = `
+//   w-full px-3 py-2.5 rounded-xl text-[13.5px]
+//   bg-white dark:bg-slate-900
+//   text-slate-800 dark:text-slate-200
+//   border border-slate-200 dark:border-slate-700
+//   placeholder:text-slate-400 dark:placeholder:text-slate-600
+//   focus:outline-none focus:ring-2 focus:ring-sky-400/30
+//   focus:border-sky-400 dark:focus:border-sky-500
+//   transition-all duration-150
+// `;
 
 // ── Create Task Modal ─────────────────────────────────────────────────────────
 
-interface CreateTaskModalProps {
-  projectId:  string;
-  onClose:    () => void;
-  onCreate:   (task: Task) => void;
-}
+// interface CreateTaskModalProps {
+//   projectId:  string;
+//   onClose:    () => void;
+//   onCreate:   (task: Task) => void;
+// }
 
 
 
@@ -394,7 +390,7 @@ const Projects = () => {
 
   // Modal
   const [isModalOpen,   setIsModalOpen]   = useState(false);
-  const [defaultColumn, setDefaultColumn] = useState<ColumnId>('todo');
+  const [_defaultColumn, setDefaultColumn] = useState<ColumnId>('todo');
 
   // Filters
   const [search,        setSearch]        = useState('');
